@@ -1,15 +1,85 @@
 <!doctype html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <title>JS Game</title>
-    <style>
-      body { margin: 0; background: #111; display: grid; place-items: center; height: 100vh; }
-      canvas { background: #000; image-rendering: pixelated; }
-    </style>
-  </head>
-  <body>
-    <canvas id="game" width="800" height="450"></canvas>
-    <script src="game.js"></script>
-  </body>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>NoAI</title>
+  <style>
+    html, body {
+      margin: 0;
+      height: 100%;
+      background: #111;
+      overflow: hidden;
+      touch-action: none; /* prevent scroll/zoom while playing */
+    }
+
+    #wrap {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      display: grid;
+      place-items: center;
+    }
+
+    canvas {
+      display: block;
+      background: #000;
+      image-rendering: pixelated;
+      touch-action: none;
+    }
+
+    /* On-screen controls (mobile) */
+    #controls {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 12px;
+      display: grid;
+      grid-template-columns: auto auto auto;
+      grid-template-rows: auto auto;
+      gap: 10px;
+      justify-content: center;
+      align-items: center;
+      pointer-events: auto;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    #controls button {
+      font: 700 16px system-ui, sans-serif;
+      padding: 14px 16px;
+      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,0.18);
+      background: rgba(255,255,255,0.14);
+      color: #fff;
+      min-width: 64px;
+    }
+
+    #shoot {
+      grid-column: 3;
+      grid-row: 1 / span 2;
+      min-width: 92px;
+    }
+
+    /* Hide controls on desktop (fine pointer + hover) */
+    @media (hover: hover) and (pointer: fine) {
+      #controls { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div id="wrap">
+    <canvas id="game"></canvas>
+
+    <div id="controls">
+      <button id="left"  data-k="arrowleft">◀</button>
+      <button id="up"    data-k="arrowup">▲</button>
+      <button id="right" data-k="arrowright">▶</button>
+      <button id="down"  data-k="arrowdown">▼</button>
+      <button id="shoot" data-k="space">SHOOT</button>
+    </div>
+  </div>
+
+  <script src="game.js"></script>
+</body>
 </html>
