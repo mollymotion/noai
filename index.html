@@ -21,6 +21,41 @@
       height: 100vh;
       display: grid;
       place-items: center;
+      align-content: start;
+      padding-top: 0px;
+    }
+
+    #instructions {
+      position: absolute;
+      top: 6px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: #fff;
+      font: 24px system-ui, sans-serif;
+      text-align: center;
+      line-height: 2;
+      z-index: 10;
+      position: relative;
+      padding: 8px 32px 8px 8px;
+    }
+
+    #close-instructions {
+      position: absolute;
+      top: 4px;
+      right: 4px;
+      background: none;
+      border: none;
+      color: #fff;
+      font-size: 20px;
+      cursor: pointer;
+      padding: 4px 8px;
+      border-radius: 4px;
+      opacity: 0.7;
+    }
+
+    #close-instructions:hover {
+      opacity: 1;
+      background: rgba(255,255,255,0.1);
     }
 
     canvas {
@@ -71,6 +106,10 @@
 </head>
 <body>
   <div id="wrap">
+    <div id="instructions">
+      ◀▶▲▼ = move<br>space = shoot
+      <button id="close-instructions">×</button>
+    </div>
     
     <canvas id="game"></canvas>
 
@@ -83,6 +122,12 @@
     </div>
   </div>
 
+  <script>
+    // Close instructions functionality
+    document.getElementById('close-instructions').addEventListener('click', function() {
+      document.getElementById('instructions').style.display = 'none';
+    });
+  </script>
   <script src="game.js"></script>
 </body>
 </html>
