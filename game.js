@@ -29,9 +29,19 @@ const keys = new Set();
 let canShoot = true;
 let spaceHeld = false;
 
+// --- helpers for mobile/keyboard unified movement ---
+function pressKey(k) {
+  keys.add(k);
+}
+function releaseKey(k) {
+  keys.delete(k);
+}
+
+// Keyboard movement tracking
 window.addEventListener("keydown", (e) => keys.add(e.key.toLowerCase()));
 window.addEventListener("keyup", (e) => keys.delete(e.key.toLowerCase()));
 
+// Single-shot space handling (prevents repeat + prevents page scroll/button activation)
 window.addEventListener(
   "keydown",
   (e) => {
@@ -52,6 +62,85 @@ window.addEventListener("keyup", (e) => {
     spaceHeld = false;
     canShoot = true;
   }
+});
+
+// --- Mobile controls wiring (RESTORED) ---
+function handleControlDown(k) {
+  // Shoot: one bullet per press
+  if (k === "space" || k === " ") {
+    spaceHeld = true;
+    if (canShoot) {
+      shootBullet();
+      canShoot = false;
+    }
+    return;
+  }
+
+  // Movement: hold
+  pressKey(k);
+}
+
+function handleControlUp(k) {
+  if (k === "space" || k === " ") {
+    spaceHeld = false;
+    canShoot = true;
+    return;
+  }
+
+  releaseKey(k);
+}
+
+const controlButtons = document.querySelectorAll("#controls button");
+controlButtons.forEach((btn) => {
+  const k = btn.dataset.k;
+
+  // Avoid focus/spacebar weirdness
+  btn.setAttribute("tabindex", "-1");
+
+  // Pointer events (modern)
+  btn.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    btn.setPointerCapture?.(e.pointerId);
+    handleControlDown(k);
+  });
+
+  btn.addEventListener("pointerup", (e) => {
+    e.preventDefault();
+    handleControlUp(k);
+  });
+
+  btn.addEventListener("pointercancel", (e) => {
+    e.preventDefault();
+    handleControlUp(k);
+  });
+
+  // Touch fallback (iOS Safari can be flaky with pointer events)
+  btn.addEventListener(
+    "touchstart",
+    (e) => {
+      e.preventDefault();
+      handleControlDown(k);
+    },
+    { passive: false }
+  );
+
+  btn.addEventListener(
+    "touchend",
+    (e) => {
+      e.preventDefault();
+      handleControlUp(k);
+    },
+    { passive: false }
+  );
+
+  btn.addEventListener(
+    "touchcancel",
+    (e) => {
+      e.preventDefault();
+      handleControlUp(k);
+    },
+    { passive: false }
+  );
 });
 
 // Responsive canvas
@@ -128,6 +217,9 @@ function reset() {
   spawnTimer = 0.3;
   canShoot = true;
   spaceHeld = false;
+
+  // Clear any “stuck” movement keys (mobile edge case)
+  keys.clear();
 }
 
 // Shooting
@@ -150,7 +242,8 @@ function update(dt) {
   const left = keys.has("a") || keys.has("arrowleft");
   const right = keys.has("d") || keys.has("arrowright");
 
-  let vx = 0, vy = 0;
+  let vx = 0,
+    vy = 0;
   if (up) vy -= 1;
   if (down) vy += 1;
   if (left) vx -= 1;
@@ -236,6 +329,7 @@ function draw() {
 
   for (const e of enemies) {
     if (!e.img.complete) continue;
+
     const sx = 1 + Math.sin(e.wigglePhaseX) * e.wiggleXAmount;
     const sy = 1 + Math.sin(e.wigglePhaseY) * e.wiggleYAmount;
 
