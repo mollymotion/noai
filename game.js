@@ -14,11 +14,9 @@ const playerShootImage = new Image();
 playerShootImage.src = "artist2.png";
 
 // Enemy images
-const enemyImages = ["enemy-brain3.png", "enemy-hand.png", "enemy-ai.png"].map((src) => {
-  const img = new Image();
-  img.src = src;
-  return img;
-});
+const enemyImage = new Image();
+enemyImage.src = "enemy-brain4.png";
+
 
 // Bullet image
 const bulletImage = new Image();
@@ -283,7 +281,7 @@ function update(dt) {
   spawnTimer -= dt;
   if (spawnTimer <= 0) {
     const h = 18 + Math.random() * 30;
-    const img = enemyImages[Math.floor(Math.random() * enemyImages.length)];
+    const img = enemyImage;
 
     enemies.push({
       x: BASE_W + 20,
