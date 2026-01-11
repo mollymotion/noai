@@ -4,33 +4,32 @@ const ctx = canvas.getContext("2d");
 const BASE_W = 800;
 const BASE_H = 450;
 
-// Enemy art is 62x80; make all enemies smaller + uniform ratio
-const ENEMY_BASE_W = 62 * 0.7; // ≈ 43
-const ENEMY_BASE_H = 80 * 0.7; // ≈ 56
+// Enemy art base (source is 62x80, enemies always smaller)
+const ENEMY_BASE_W = 62 * 0.7;
+const ENEMY_BASE_H = 80 * 0.7;
 
 // Player HP
 const MAX_HP = 4;
 const IFRAME_SECONDS = 1.0;
+const HEAL_FLASH_SECONDS = 0.35;
 
 // Heart pickup
-const HEART_SPAWN_CHANCE = 0.03; // 3% chance per enemy spawn (rare)
+const HEART_SPAWN_CHANCE = 0.03;
 const HEART_BASE_W = 18;
 const HEART_BASE_H = 16;
 
 ctx.imageSmoothingEnabled = false;
 
-// Player images
+// Images
 const playerImage = new Image();
 playerImage.src = "artist.png";
 
 const playerShootImage = new Image();
 playerShootImage.src = "artist2.png";
 
-// Single enemy image
 const enemyImage = new Image();
 enemyImage.src = "enemy-brain4.png";
 
-// Bullet image
 const bulletImage = new Image();
 bulletImage.src = "bullet.png";
 
@@ -39,28 +38,28 @@ const keys = new Set();
 let canShoot = true;
 let spaceHeld = false;
 
-// Mobile drag state
+// Mobile detection
 const isTouchDevice =
   matchMedia("(hover: none), (pointer: coarse)").matches ||
   navigator.maxTouchPoints > 0;
 
+// Drag state
 let dragActive = false;
 let dragPointerId = null;
 let dragOffsetX = 0;
 let dragOffsetY = 0;
 
-// Cached rect for mapping pointer -> BASE coords
+// Canvas rect for pointer mapping
 let canvasRect = null;
 function updateCanvasRect() {
   canvasRect = canvas.getBoundingClientRect();
 }
-window.addEventListener("resize", updateCanvasRect, { passive: true });
+window.addEventListener("resize", updateCanvasRect);
 
-// Keyboard movement tracking (desktop)
+// Keyboard controls (desktop)
 window.addEventListener("keydown", (e) => keys.add(e.key.toLowerCase()));
 window.addEventListener("keyup", (e) => keys.delete(e.key.toLowerCase()));
 
-// Single-shot space handling (desktop)
 window.addEventListener(
   "keydown",
   (e) => {
@@ -83,7 +82,7 @@ window.addEventListener("keyup", (e) => {
   }
 });
 
-// Responsive canvas
+// Resize canvas
 function resizeCanvas() {
   const dpr = Math.max(1, window.devicePixelRatio || 1);
   const scale = Math.min(window.innerWidth / BASE_W, window.innerHeight / BASE_H);
@@ -104,7 +103,7 @@ resizeCanvas();
 const player = { x: 60, y: 200, w: 62, h: 62, speed: 260 };
 const bullets = [];
 const enemies = [];
-const pickups = []; // hearts
+const pickups = [];
 
 let lastTime = performance.now();
 let spawnTimer = 0;
@@ -113,8 +112,9 @@ let alive = true;
 
 let hp = MAX_HP;
 let iFrameTimer = 0;
+let healFlashTimer = 0;
 
-// --- Restart button (DOM overlay) ---
+// Restart button
 const restartBtn = document.createElement("button");
 restartBtn.textContent = "Restart";
 restartBtn.style.position = "absolute";
@@ -130,7 +130,6 @@ restartBtn.style.color = "#fff";
 restartBtn.style.cursor = "pointer";
 restartBtn.style.display = "none";
 restartBtn.style.zIndex = "20";
-
 document.getElementById("wrap").appendChild(restartBtn);
 
 restartBtn.addEventListener("click", () => {
@@ -144,14 +143,10 @@ function clamp(v, min, max) {
 }
 
 function aabb(a, b) {
-  return (
-    a.x < b.x + b.w &&
-    a.x + a.w > b.x &&
-    a.y < b.y + b.h &&
-    a.y + a.h > b.y
-  );
+  return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
 }
 
+// Reset
 function reset() {
   bullets.length = 0;
   enemies.length = 0;
@@ -166,6 +161,7 @@ function reset() {
 
   hp = MAX_HP;
   iFrameTimer = 0;
+  healFlashTimer = 0;
 
   canShoot = true;
   spaceHeld = false;
@@ -187,61 +183,49 @@ function shootBullet() {
   });
 }
 
-// --- Mobile: drag-to-move + tap-to-shoot ---
+// Pointer helpers
 function pointerToGameXY(clientX, clientY) {
-  if (!canvasRect) updateCanvasRect();
   const x = ((clientX - canvasRect.left) / canvasRect.width) * BASE_W;
   const y = ((clientY - canvasRect.top) / canvasRect.height) * BASE_H;
   return { x, y };
 }
 
 function isPointInPlayer(px, py) {
-  return (
-    px >= player.x &&
-    px <= player.x + player.w &&
-    py >= player.y &&
-    py <= player.y + player.h
-  );
+  return px >= player.x && px <= player.x + player.w && py >= player.y && py <= player.y + player.h;
 }
 
-function startDragOrTapShoot(e) {
-  if (!alive) return;
-  if (e.pointerType === "mouse") return;
+// Mobile drag + tap
+function startPointer(e) {
+  if (!alive || e.pointerType === "mouse") return;
 
   const { x, y } = pointerToGameXY(e.clientX, e.clientY);
 
-  // Touch player => drag
   if (isPointInPlayer(x, y)) {
     dragActive = true;
     dragPointerId = e.pointerId;
     dragOffsetX = x - player.x;
     dragOffsetY = y - player.y;
-    canvas.setPointerCapture?.(e.pointerId);
+    canvas.setPointerCapture(e.pointerId);
     e.preventDefault();
-    return;
+  } else {
+    if (canShoot) {
+      shootBullet();
+      canShoot = false;
+    }
+    spaceHeld = true;
+    e.preventDefault();
   }
-
-  // Touch elsewhere => shoot once
-  if (canShoot) {
-    shootBullet();
-    canShoot = false;
-  }
-  spaceHeld = true;
-  e.preventDefault();
 }
 
-function moveDrag(e) {
-  if (!dragActive) return;
-  if (e.pointerId !== dragPointerId) return;
-
+function movePointer(e) {
+  if (!dragActive || e.pointerId !== dragPointerId) return;
   const { x, y } = pointerToGameXY(e.clientX, e.clientY);
   player.x = clamp(x - dragOffsetX, 0, BASE_W - player.w);
   player.y = clamp(y - dragOffsetY, 0, BASE_H - player.h);
-
   e.preventDefault();
 }
 
-function endDragOrTap(e) {
+function endPointer(e) {
   if (e.pointerId === dragPointerId) {
     dragActive = false;
     dragPointerId = null;
@@ -251,23 +235,19 @@ function endDragOrTap(e) {
 }
 
 if (isTouchDevice) {
-  canvas.addEventListener("pointerdown", startDragOrTapShoot, { passive: false });
-  canvas.addEventListener("pointermove", moveDrag, { passive: false });
-  canvas.addEventListener("pointerup", endDragOrTap, { passive: false });
-  canvas.addEventListener("pointercancel", endDragOrTap, { passive: false });
+  canvas.addEventListener("pointerdown", startPointer, { passive: false });
+  canvas.addEventListener("pointermove", movePointer, { passive: false });
+  canvas.addEventListener("pointerup", endPointer, { passive: false });
+  canvas.addEventListener("pointercancel", endPointer, { passive: false });
 }
 
-// Damage handling
-function takeHit(removeEnemyIndex) {
+// Damage
+function takeHit(enemyIndex) {
   if (iFrameTimer > 0) return;
 
-  hp -= 1;
+  hp--;
   iFrameTimer = IFRAME_SECONDS;
-
-  // Remove the enemy you collided with so you don't instantly get hit again
-  if (typeof removeEnemyIndex === "number") {
-    enemies.splice(removeEnemyIndex, 1);
-  }
+  enemies.splice(enemyIndex, 1);
 
   if (hp <= 0) {
     alive = false;
@@ -275,45 +255,33 @@ function takeHit(removeEnemyIndex) {
   }
 }
 
-// Heart drawing (no asset needed)
+// Draw heart
 function drawHeart(x, y, w, h) {
   const cx = x + w / 2;
-  const top = y + h * 0.35;
-  const bottom = y + h;
-
-  ctx.save();
   ctx.beginPath();
-  ctx.moveTo(cx, bottom);
-
-  ctx.bezierCurveTo(x, y + h * 0.70, x, top, cx, top);
-  ctx.bezierCurveTo(x + w, top, x + w, y + h * 0.70, cx, bottom);
-
-  ctx.closePath();
-  ctx.fillStyle = "#ff4d6d"; // tiny heart color
+  ctx.moveTo(cx, y + h);
+  ctx.bezierCurveTo(x, y + h * 0.7, x, y + h * 0.35, cx, y + h * 0.35);
+  ctx.bezierCurveTo(x + w, y + h * 0.35, x + w, y + h * 0.7, cx, y + h);
+  ctx.fillStyle = "#ff4d6d";
   ctx.fill();
-  ctx.restore();
 }
 
+// Update loop
 function update(dt) {
   if (!alive) return;
 
-  // i-frames timer
-  if (iFrameTimer > 0) iFrameTimer = Math.max(0, iFrameTimer - dt);
+  if (iFrameTimer > 0) iFrameTimer -= dt;
+  if (healFlashTimer > 0) healFlashTimer -= dt;
 
-  // Desktop movement (mobile uses drag)
+  // Desktop movement
   if (!isTouchDevice) {
     const up = keys.has("w") || keys.has("arrowup");
     const down = keys.has("s") || keys.has("arrowdown");
     const left = keys.has("a") || keys.has("arrowleft");
     const right = keys.has("d") || keys.has("arrowright");
 
-    let vx = 0,
-      vy = 0;
-    if (up) vy -= 1;
-    if (down) vy += 1;
-    if (left) vx -= 1;
-    if (right) vx += 1;
-
+    let vx = (right ? 1 : 0) - (left ? 1 : 0);
+    let vy = (down ? 1 : 0) - (up ? 1 : 0);
     const len = Math.hypot(vx, vy) || 1;
     vx /= len;
     vy /= len;
@@ -323,162 +291,123 @@ function update(dt) {
   }
 
   // Bullets
+  bullets.forEach((b) => (b.x += b.speed * dt));
   for (let i = bullets.length - 1; i >= 0; i--) {
-    bullets[i].x += bullets[i].speed * dt;
     if (bullets[i].x > BASE_W) bullets.splice(i, 1);
   }
 
-  // Spawn enemies (uniform aspect ratio; size varies slightly but ALWAYS smaller)
+  // Spawn enemies + hearts
   spawnTimer -= dt;
   if (spawnTimer <= 0) {
-    const scale = 0.6 + Math.random() * 0.15; // max 0.75 of base => always smaller
-
+    const scale = 0.6 + Math.random() * 0.15;
     const w = ENEMY_BASE_W * scale;
     const h = ENEMY_BASE_H * scale;
-
-    const enemySpeed = 120 + Math.random() * 160;
+    const speed = 120 + Math.random() * 160;
 
     enemies.push({
       x: BASE_W + 20,
       y: Math.random() * (BASE_H - h),
       w,
       h,
-      speed: enemySpeed,
-      img: enemyImage,
-
-      wiggleXSpeed: 4 + Math.random() * 3,
-      wiggleYSpeed: 4 + Math.random() * 3,
-      wiggleXAmount: 0.06 + Math.random() * 0.04,
-      wiggleYAmount: 0.06 + Math.random() * 0.04,
-      wigglePhaseX: Math.random() * Math.PI * 2,
-      wigglePhaseY: Math.random() * Math.PI * 2,
+      speed,
+      phaseX: Math.random() * Math.PI * 2,
+      phaseY: Math.random() * Math.PI * 2,
     });
 
-    // Rare heart pickup (comes in like an enemy, but smaller)
     if (Math.random() < HEART_SPAWN_CHANCE) {
-      const hw = HEART_BASE_W * (0.9 + Math.random() * 0.2);
-      const hh = HEART_BASE_H * (0.9 + Math.random() * 0.2);
-
       pickups.push({
-        type: "heart",
-        x: BASE_W + 20 + 18, // slightly offset from enemy spawn
-        y: Math.random() * (BASE_H - hh),
-        w: hw,
-        h: hh,
-        speed: enemySpeed * 0.95, // roughly matches enemy pace
-        phaseX: Math.random() * Math.PI * 2,
-        phaseY: Math.random() * Math.PI * 2,
-        wiggleXSpeed: 5 + Math.random() * 3,
-        wiggleYSpeed: 5 + Math.random() * 3,
-        wiggleXAmount: 0.08 + Math.random() * 0.04,
-        wiggleYAmount: 0.08 + Math.random() * 0.04,
+        x: BASE_W + 40,
+        y: Math.random() * (BASE_H - HEART_BASE_H),
+        w: HEART_BASE_W,
+        h: HEART_BASE_H,
+        speed: speed * 0.95,
+        phase: Math.random() * Math.PI * 2,
       });
     }
 
     spawnTimer = 0.65;
   }
 
-  // Enemies move + wiggle phases
-  for (let i = enemies.length - 1; i >= 0; i--) {
-    const e = enemies[i];
+  enemies.forEach((e) => {
     e.x -= e.speed * dt;
-    e.wigglePhaseX += e.wiggleXSpeed * dt;
-    e.wigglePhaseY += e.wiggleYSpeed * dt;
+    e.phaseX += dt * 6;
+    e.phaseY += dt * 6;
+  });
 
-    if (e.x + e.w < 0) enemies.splice(i, 1);
-  }
-
-  // Pickups move + wiggle phases
-  for (let i = pickups.length - 1; i >= 0; i--) {
-    const p = pickups[i];
+  pickups.forEach((p) => {
     p.x -= p.speed * dt;
-    p.phaseX += p.wiggleXSpeed * dt;
-    p.phaseY += p.wiggleYSpeed * dt;
+    p.phase += dt * 6;
+  });
 
-    if (p.x + p.w < 0) pickups.splice(i, 1);
-  }
-
-  // Bullet-enemy collisions
+  // Bullet vs enemy
   for (let ei = enemies.length - 1; ei >= 0; ei--) {
     for (let bi = bullets.length - 1; bi >= 0; bi--) {
       if (aabb(enemies[ei], bullets[bi])) {
-        bullets.splice(bi, 1);
         enemies.splice(ei, 1);
+        bullets.splice(bi, 1);
         score += 10;
         break;
       }
     }
   }
 
-  // Player-pickup collisions (hearts restore 1 HP)
-  for (let pi = pickups.length - 1; pi >= 0; pi--) {
-    const p = pickups[pi];
-    if (aabb(player, p)) {
-      if (p.type === "heart") {
-        hp = Math.min(MAX_HP, hp + 1);
+  // Player vs heart
+  for (let i = pickups.length - 1; i >= 0; i--) {
+    if (aabb(player, pickups[i])) {
+      if (hp < MAX_HP) {
+        hp++;
+        healFlashTimer = HEAL_FLASH_SECONDS;
       }
-      pickups.splice(pi, 1);
+      pickups.splice(i, 1);
     }
   }
 
-  // Player-enemy collisions => damage instead of instant death
-  for (let ei = enemies.length - 1; ei >= 0; ei--) {
-    if (aabb(player, enemies[ei])) {
-      takeHit(ei);
+  // Player vs enemy
+  for (let i = enemies.length - 1; i >= 0; i--) {
+    if (aabb(player, enemies[i])) {
+      takeHit(i);
       break;
     }
   }
 }
 
+// Draw
 function draw() {
   ctx.clearRect(0, 0, BASE_W, BASE_H);
 
-  // Flicker player during i-frames
   const flicker = iFrameTimer > 0 && Math.floor(iFrameTimer * 20) % 2 === 0;
 
-  // Player
   if (!flicker) {
-    const pImg = spaceHeld ? playerShootImage : playerImage;
-    if (pImg.complete) ctx.drawImage(pImg, player.x, player.y, player.w, player.h);
+    const img = spaceHeld ? playerShootImage : playerImage;
+    if (healFlashTimer > 0) {
+      ctx.drawImage(img, player.x, player.y, player.w, player.h);
+      ctx.globalCompositeOperation = "source-atop";
+      ctx.fillStyle = "rgba(255,255,255,0.62)";
+      ctx.fillRect(player.x, player.y, player.w, player.h);
+      ctx.globalCompositeOperation = "source-over";
+    } else {
+      ctx.drawImage(img, player.x, player.y, player.w, player.h);
+    }
   }
 
-  // Bullets
-  for (const b of bullets) {
-    if (bulletImage.complete) ctx.drawImage(bulletImage, b.x, b.y, b.w, b.h);
-  }
+  bullets.forEach((b) => ctx.drawImage(bulletImage, b.x, b.y, b.w, b.h));
 
-  // Pickups (hearts)
-  for (const p of pickups) {
-    const sx = 1 + Math.sin(p.phaseX) * p.wiggleXAmount;
-    const sy = 1 + Math.sin(p.phaseY) * p.wiggleYAmount;
+  pickups.forEach((p) => drawHeart(p.x, p.y, p.w, p.h));
 
-    ctx.save();
-    ctx.translate(p.x + p.w / 2, p.y + p.h / 2);
-    ctx.scale(sx, sy);
-    drawHeart(-p.w / 2, -p.h / 2, p.w, p.h);
-    ctx.restore();
-  }
-
-  // Enemies (wiggle)
-  for (const e of enemies) {
-    if (!e.img.complete) continue;
-
-    const sx = 1 + Math.sin(e.wigglePhaseX) * e.wiggleXAmount;
-    const sy = 1 + Math.sin(e.wigglePhaseY) * e.wiggleYAmount;
-
+  enemies.forEach((e) => {
+    const sx = 1 + Math.sin(e.phaseX) * 0.06;
+    const sy = 1 + Math.sin(e.phaseY) * 0.06;
     ctx.save();
     ctx.translate(e.x + e.w / 2, e.y + e.h / 2);
     ctx.scale(sx, sy);
-    ctx.drawImage(e.img, -e.w / 2, -e.h / 2, e.w, e.h);
+    ctx.drawImage(enemyImage, -e.w / 2, -e.h / 2, e.w, e.h);
     ctx.restore();
-  }
+  });
 
-  // UI
   ctx.fillStyle = "#e5e7eb";
   ctx.font = "16px system-ui, sans-serif";
   ctx.fillText(`Score: ${score}`, 12, 24);
 
-  // HP as hearts
   const hearts = "♥".repeat(hp) + "♡".repeat(MAX_HP - hp);
   ctx.fillText(`HP: ${hearts}`, 12, 44);
 
@@ -488,10 +417,10 @@ function draw() {
   }
 }
 
+// Loop
 function loop(now) {
   const dt = Math.min(0.033, (now - lastTime) / 1000);
   lastTime = now;
-
   update(dt);
   draw();
   requestAnimationFrame(loop);
