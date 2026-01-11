@@ -4,6 +4,14 @@ const ctx = canvas.getContext("2d");
 const BASE_W = 800;
 const BASE_H = 450;
 
+// Enemy art is 62x80; make all enemies smaller + uniform ratio
+const ENEMY_BASE_W = 62 * 0.7; // ≈ 43
+const ENEMY_BASE_H = 80 * 0.7; // ≈ 56
+
+// Player HP
+const MAX_HP = 4;
+const IFRAME_SECONDS = 1.0;
+
 ctx.imageSmoothingEnabled = false;
 
 // Player images
@@ -13,10 +21,9 @@ playerImage.src = "artist.png";
 const playerShootImage = new Image();
 playerShootImage.src = "artist2.png";
 
-// Enemy images
+// Single enemy image
 const enemyImage = new Image();
 enemyImage.src = "enemy-brain4.png";
-
 
 // Bullet image
 const bulletImage = new Image();
@@ -37,22 +44,14 @@ let dragPointerId = null;
 let dragOffsetX = 0;
 let dragOffsetY = 0;
 
-// Keep a cached rect for pointer->game coordinate mapping
+// Cached rect for mapping pointer -> BASE coords
 let canvasRect = null;
 function updateCanvasRect() {
   canvasRect = canvas.getBoundingClientRect();
 }
 window.addEventListener("resize", updateCanvasRect, { passive: true });
 
-// Movement helpers (desktop)
-function pressKey(k) {
-  keys.add(k);
-}
-function releaseKey(k) {
-  keys.delete(k);
-}
-
-// Keyboard movement tracking
+// Keyboard movement tracking (desktop)
 window.addEventListener("keydown", (e) => keys.add(e.key.toLowerCase()));
 window.addEventListener("keyup", (e) => keys.delete(e.key.toLowerCase()));
 
@@ -91,7 +90,6 @@ function resizeCanvas() {
   canvas.height = Math.floor(BASE_H * dpr);
 
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-
   updateCanvasRect();
 }
 window.addEventListener("resize", resizeCanvas);
@@ -106,6 +104,9 @@ let lastTime = performance.now();
 let spawnTimer = 0;
 let score = 0;
 let alive = true;
+
+let hp = MAX_HP;
+let iFrameTimer = 0;
 
 // --- Restart button (DOM overlay) ---
 const restartBtn = document.createElement("button");
@@ -148,16 +149,21 @@ function aabb(a, b) {
 function reset() {
   bullets.length = 0;
   enemies.length = 0;
+
   player.x = 60;
   player.y = 200;
+
   score = 0;
   alive = true;
   spawnTimer = 0.3;
+
+  hp = MAX_HP;
+  iFrameTimer = 0;
+
   canShoot = true;
   spaceHeld = false;
   keys.clear();
 
-  // reset drag
   dragActive = false;
   dragPointerId = null;
 }
@@ -183,16 +189,21 @@ function pointerToGameXY(clientX, clientY) {
 }
 
 function isPointInPlayer(px, py) {
-  return px >= player.x && px <= player.x + player.w && py >= player.y && py <= player.y + player.h;
+  return (
+    px >= player.x &&
+    px <= player.x + player.w &&
+    py >= player.y &&
+    py <= player.y + player.h
+  );
 }
 
-function startDrag(e) {
+function startDragOrTapShoot(e) {
   if (!alive) return;
-  if (e.pointerType === "mouse") return; // drag only for touch/pen feel
+  if (e.pointerType === "mouse") return;
 
   const { x, y } = pointerToGameXY(e.clientX, e.clientY);
 
-  // Only start drag if you touch the player. Otherwise it's a tap-to-shoot.
+  // Touch player => drag
   if (isPointInPlayer(x, y)) {
     dragActive = true;
     dragPointerId = e.pointerId;
@@ -200,15 +211,16 @@ function startDrag(e) {
     dragOffsetY = y - player.y;
     canvas.setPointerCapture?.(e.pointerId);
     e.preventDefault();
-  } else {
-    // Tap anywhere else to shoot (single shot)
-    if (canShoot) {
-      shootBullet();
-      canShoot = false;
-    }
-    spaceHeld = true;
-    e.preventDefault();
+    return;
   }
+
+  // Touch elsewhere => shoot once
+  if (canShoot) {
+    shootBullet();
+    canShoot = false;
+  }
+  spaceHeld = true;
+  e.preventDefault();
 }
 
 function moveDrag(e) {
@@ -216,7 +228,6 @@ function moveDrag(e) {
   if (e.pointerId !== dragPointerId) return;
 
   const { x, y } = pointerToGameXY(e.clientX, e.clientY);
-
   player.x = clamp(x - dragOffsetX, 0, BASE_W - player.w);
   player.y = clamp(y - dragOffsetY, 0, BASE_H - player.h);
 
@@ -228,28 +239,43 @@ function endDragOrTap(e) {
     dragActive = false;
     dragPointerId = null;
   }
-  // releasing ends "shoot sprite" state + re-arms shooting
+  // end "shoot sprite" state + re-arm shooting
   spaceHeld = false;
   canShoot = true;
 }
 
-// Enable drag controls only on touch-ish devices
 if (isTouchDevice) {
-  // Optional: disable the button controls on mobile by making them ignore pointer events
-  const controlsEl = document.getElementById("controls");
-  if (controlsEl) controlsEl.style.display = "none";
-
-  canvas.addEventListener("pointerdown", startDrag, { passive: false });
+  canvas.addEventListener("pointerdown", startDragOrTapShoot, { passive: false });
   canvas.addEventListener("pointermove", moveDrag, { passive: false });
   canvas.addEventListener("pointerup", endDragOrTap, { passive: false });
   canvas.addEventListener("pointercancel", endDragOrTap, { passive: false });
 }
 
-// Update loop
+// Damage handling
+function takeHit(removeEnemyIndex) {
+  if (iFrameTimer > 0) return;
+
+  hp -= 1;
+  iFrameTimer = IFRAME_SECONDS;
+
+  // Remove the enemy you collided with so you don't instantly get hit again
+  if (typeof removeEnemyIndex === "number") {
+    enemies.splice(removeEnemyIndex, 1);
+  }
+
+  if (hp <= 0) {
+    alive = false;
+    restartBtn.style.display = "block";
+  }
+}
+
 function update(dt) {
   if (!alive) return;
 
-  // Desktop movement only (mobile uses drag)
+  // i-frames timer
+  if (iFrameTimer > 0) iFrameTimer = Math.max(0, iFrameTimer - dt);
+
+  // Desktop movement (mobile uses drag)
   if (!isTouchDevice) {
     const up = keys.has("w") || keys.has("arrowup");
     const down = keys.has("s") || keys.has("arrowdown");
@@ -277,19 +303,22 @@ function update(dt) {
     if (bullets[i].x > BASE_W) bullets.splice(i, 1);
   }
 
-  // Spawn enemies
+  // Spawn enemies (uniform aspect ratio; size varies slightly but ALWAYS smaller)
   spawnTimer -= dt;
   if (spawnTimer <= 0) {
-    const h = 18 + Math.random() * 30;
-    const img = enemyImage;
+    const scale = 0.6 + Math.random() * 0.15; // max 0.75 of base => always smaller
+
+    const w = ENEMY_BASE_W * scale;
+    const h = ENEMY_BASE_H * scale;
 
     enemies.push({
       x: BASE_W + 20,
       y: Math.random() * (BASE_H - h),
-      w: 32,
+      w,
       h,
       speed: 120 + Math.random() * 160,
-      img,
+      img: enemyImage,
+
       wiggleXSpeed: 4 + Math.random() * 3,
       wiggleYSpeed: 4 + Math.random() * 3,
       wiggleXAmount: 0.06 + Math.random() * 0.04,
@@ -301,7 +330,7 @@ function update(dt) {
     spawnTimer = 0.65;
   }
 
-  // Enemies
+  // Enemies move + wiggle phases
   for (let i = enemies.length - 1; i >= 0; i--) {
     const e = enemies[i];
     e.x -= e.speed * dt;
@@ -311,7 +340,7 @@ function update(dt) {
     if (e.x + e.w < 0) enemies.splice(i, 1);
   }
 
-  // Collisions
+  // Bullet-enemy collisions
   for (let ei = enemies.length - 1; ei >= 0; ei--) {
     for (let bi = bullets.length - 1; bi >= 0; bi--) {
       if (aabb(enemies[ei], bullets[bi])) {
@@ -323,26 +352,33 @@ function update(dt) {
     }
   }
 
-  for (const e of enemies) {
-    if (aabb(player, e)) {
-      alive = false;
-      restartBtn.style.display = "block";
+  // Player-enemy collisions => damage instead of instant death
+  for (let ei = enemies.length - 1; ei >= 0; ei--) {
+    if (aabb(player, enemies[ei])) {
+      takeHit(ei);
       break;
     }
   }
 }
 
-// Draw
 function draw() {
   ctx.clearRect(0, 0, BASE_W, BASE_H);
 
-  const pImg = spaceHeld ? playerShootImage : playerImage;
-  if (pImg.complete) ctx.drawImage(pImg, player.x, player.y, player.w, player.h);
+  // Flicker player during i-frames
+  const flicker = iFrameTimer > 0 && Math.floor(iFrameTimer * 20) % 2 === 0;
 
+  // Player
+  if (!flicker) {
+    const pImg = spaceHeld ? playerShootImage : playerImage;
+    if (pImg.complete) ctx.drawImage(pImg, player.x, player.y, player.w, player.h);
+  }
+
+  // Bullets
   for (const b of bullets) {
     if (bulletImage.complete) ctx.drawImage(bulletImage, b.x, b.y, b.w, b.h);
   }
 
+  // Enemies (wiggle)
   for (const e of enemies) {
     if (!e.img.complete) continue;
 
@@ -356,9 +392,14 @@ function draw() {
     ctx.restore();
   }
 
+  // UI
   ctx.fillStyle = "#e5e7eb";
   ctx.font = "16px system-ui, sans-serif";
   ctx.fillText(`Score: ${score}`, 12, 24);
+
+  // HP as hearts
+  const hearts = "♥".repeat(hp) + "♡".repeat(MAX_HP - hp);
+  ctx.fillText(`HP: ${hearts}`, 12, 44);
 
   if (!alive) {
     ctx.font = "28px system-ui, sans-serif";
@@ -366,10 +407,10 @@ function draw() {
   }
 }
 
-// Loop
 function loop(now) {
   const dt = Math.min(0.033, (now - lastTime) / 1000);
   lastTime = now;
+
   update(dt);
   draw();
   requestAnimationFrame(loop);
