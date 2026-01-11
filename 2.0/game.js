@@ -29,24 +29,7 @@ const keys = new Set();
 let canShoot = true;
 let spaceHeld = false;
 
-// Mobile drag state
-const isTouchDevice =
-  matchMedia("(hover: none), (pointer: coarse)").matches ||
-  navigator.maxTouchPoints > 0;
-
-let dragActive = false;
-let dragPointerId = null;
-let dragOffsetX = 0;
-let dragOffsetY = 0;
-
-// Keep a cached rect for pointer->game coordinate mapping
-let canvasRect = null;
-function updateCanvasRect() {
-  canvasRect = canvas.getBoundingClientRect();
-}
-window.addEventListener("resize", updateCanvasRect, { passive: true });
-
-// Movement helpers (desktop)
+// --- helpers for mobile/keyboard unified movement ---
 function pressKey(k) {
   keys.add(k);
 }
@@ -58,7 +41,7 @@ function releaseKey(k) {
 window.addEventListener("keydown", (e) => keys.add(e.key.toLowerCase()));
 window.addEventListener("keyup", (e) => keys.delete(e.key.toLowerCase()));
 
-// Single-shot space handling (desktop)
+// Single-shot space handling (prevents repeat + prevents page scroll/button activation)
 window.addEventListener(
   "keydown",
   (e) => {
@@ -81,6 +64,85 @@ window.addEventListener("keyup", (e) => {
   }
 });
 
+// --- Mobile controls wiring (RESTORED) ---
+function handleControlDown(k) {
+  // Shoot: one bullet per press
+  if (k === "space" || k === " ") {
+    spaceHeld = true;
+    if (canShoot) {
+      shootBullet();
+      canShoot = false;
+    }
+    return;
+  }
+
+  // Movement: hold
+  pressKey(k);
+}
+
+function handleControlUp(k) {
+  if (k === "space" || k === " ") {
+    spaceHeld = false;
+    canShoot = true;
+    return;
+  }
+
+  releaseKey(k);
+}
+
+const controlButtons = document.querySelectorAll("#controls button");
+controlButtons.forEach((btn) => {
+  const k = btn.dataset.k;
+
+  // Avoid focus/spacebar weirdness
+  btn.setAttribute("tabindex", "-1");
+
+  // Pointer events (modern)
+  btn.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    btn.setPointerCapture?.(e.pointerId);
+    handleControlDown(k);
+  });
+
+  btn.addEventListener("pointerup", (e) => {
+    e.preventDefault();
+    handleControlUp(k);
+  });
+
+  btn.addEventListener("pointercancel", (e) => {
+    e.preventDefault();
+    handleControlUp(k);
+  });
+
+  // Touch fallback (iOS Safari can be flaky with pointer events)
+  btn.addEventListener(
+    "touchstart",
+    (e) => {
+      e.preventDefault();
+      handleControlDown(k);
+    },
+    { passive: false }
+  );
+
+  btn.addEventListener(
+    "touchend",
+    (e) => {
+      e.preventDefault();
+      handleControlUp(k);
+    },
+    { passive: false }
+  );
+
+  btn.addEventListener(
+    "touchcancel",
+    (e) => {
+      e.preventDefault();
+      handleControlUp(k);
+    },
+    { passive: false }
+  );
+});
+
 // Responsive canvas
 function resizeCanvas() {
   const dpr = Math.max(1, window.devicePixelRatio || 1);
@@ -93,8 +155,6 @@ function resizeCanvas() {
   canvas.height = Math.floor(BASE_H * dpr);
 
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-
-  updateCanvasRect();
 }
 window.addEventListener("resize", resizeCanvas);
 resizeCanvas();
@@ -157,11 +217,9 @@ function reset() {
   spawnTimer = 0.3;
   canShoot = true;
   spaceHeld = false;
-  keys.clear();
 
-  // reset drag
-  dragActive = false;
-  dragPointerId = null;
+  // Clear any “stuck” movement keys (mobile edge case)
+  keys.clear();
 }
 
 // Shooting
@@ -176,102 +234,27 @@ function shootBullet() {
   });
 }
 
-// --- Mobile: drag-to-move + tap-to-shoot ---
-function pointerToGameXY(clientX, clientY) {
-  if (!canvasRect) updateCanvasRect();
-  const x = ((clientX - canvasRect.left) / canvasRect.width) * BASE_W;
-  const y = ((clientY - canvasRect.top) / canvasRect.height) * BASE_H;
-  return { x, y };
-}
-
-function isPointInPlayer(px, py) {
-  return px >= player.x && px <= player.x + player.w && py >= player.y && py <= player.y + player.h;
-}
-
-function startDrag(e) {
-  if (!alive) return;
-  if (e.pointerType === "mouse") return; // drag only for touch/pen feel
-
-  const { x, y } = pointerToGameXY(e.clientX, e.clientY);
-
-  // Only start drag if you touch the player. Otherwise it's a tap-to-shoot.
-  if (isPointInPlayer(x, y)) {
-    dragActive = true;
-    dragPointerId = e.pointerId;
-    dragOffsetX = x - player.x;
-    dragOffsetY = y - player.y;
-    canvas.setPointerCapture?.(e.pointerId);
-    e.preventDefault();
-  } else {
-    // Tap anywhere else to shoot (single shot)
-    if (canShoot) {
-      shootBullet();
-      canShoot = false;
-    }
-    spaceHeld = true;
-    e.preventDefault();
-  }
-}
-
-function moveDrag(e) {
-  if (!dragActive) return;
-  if (e.pointerId !== dragPointerId) return;
-
-  const { x, y } = pointerToGameXY(e.clientX, e.clientY);
-
-  player.x = clamp(x - dragOffsetX, 0, BASE_W - player.w);
-  player.y = clamp(y - dragOffsetY, 0, BASE_H - player.h);
-
-  e.preventDefault();
-}
-
-function endDragOrTap(e) {
-  if (e.pointerId === dragPointerId) {
-    dragActive = false;
-    dragPointerId = null;
-  }
-  // releasing ends "shoot sprite" state + re-arms shooting
-  spaceHeld = false;
-  canShoot = true;
-}
-
-// Enable drag controls only on touch-ish devices
-if (isTouchDevice) {
-  // Optional: disable the button controls on mobile by making them ignore pointer events
-  const controlsEl = document.getElementById("controls");
-  if (controlsEl) controlsEl.style.display = "none";
-
-  canvas.addEventListener("pointerdown", startDrag, { passive: false });
-  canvas.addEventListener("pointermove", moveDrag, { passive: false });
-  canvas.addEventListener("pointerup", endDragOrTap, { passive: false });
-  canvas.addEventListener("pointercancel", endDragOrTap, { passive: false });
-}
-
-// Update loop
 function update(dt) {
   if (!alive) return;
 
-  // Desktop movement only (mobile uses drag)
-  if (!isTouchDevice) {
-    const up = keys.has("w") || keys.has("arrowup");
-    const down = keys.has("s") || keys.has("arrowdown");
-    const left = keys.has("a") || keys.has("arrowleft");
-    const right = keys.has("d") || keys.has("arrowright");
+  const up = keys.has("w") || keys.has("arrowup");
+  const down = keys.has("s") || keys.has("arrowdown");
+  const left = keys.has("a") || keys.has("arrowleft");
+  const right = keys.has("d") || keys.has("arrowright");
 
-    let vx = 0,
-      vy = 0;
-    if (up) vy -= 1;
-    if (down) vy += 1;
-    if (left) vx -= 1;
-    if (right) vx += 1;
+  let vx = 0,
+    vy = 0;
+  if (up) vy -= 1;
+  if (down) vy += 1;
+  if (left) vx -= 1;
+  if (right) vx += 1;
 
-    const len = Math.hypot(vx, vy) || 1;
-    vx /= len;
-    vy /= len;
+  const len = Math.hypot(vx, vy) || 1;
+  vx /= len;
+  vy /= len;
 
-    player.x = clamp(player.x + vx * player.speed * dt, 0, BASE_W - player.w);
-    player.y = clamp(player.y + vy * player.speed * dt, 0, BASE_H - player.h);
-  }
+  player.x = clamp(player.x + vx * player.speed * dt, 0, BASE_W - player.w);
+  player.y = clamp(player.y + vy * player.speed * dt, 0, BASE_H - player.h);
 
   // Bullets
   for (let i = bullets.length - 1; i >= 0; i--) {
@@ -334,7 +317,6 @@ function update(dt) {
   }
 }
 
-// Draw
 function draw() {
   ctx.clearRect(0, 0, BASE_W, BASE_H);
 
@@ -368,7 +350,6 @@ function draw() {
   }
 }
 
-// Loop
 function loop(now) {
   const dt = Math.min(0.033, (now - lastTime) / 1000);
   lastTime = now;
