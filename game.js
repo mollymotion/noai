@@ -12,6 +12,11 @@ const ENEMY_BASE_H = 80 * 0.7; // ≈ 56
 const MAX_HP = 4;
 const IFRAME_SECONDS = 1.0;
 
+// Heart pickup
+const HEART_SPAWN_CHANCE = 0.03; // 3% chance per enemy spawn (rare)
+const HEART_BASE_W = 18;
+const HEART_BASE_H = 16;
+
 ctx.imageSmoothingEnabled = false;
 
 // Player images
@@ -99,6 +104,7 @@ resizeCanvas();
 const player = { x: 60, y: 200, w: 62, h: 62, speed: 260 };
 const bullets = [];
 const enemies = [];
+const pickups = []; // hearts
 
 let lastTime = performance.now();
 let spawnTimer = 0;
@@ -149,6 +155,7 @@ function aabb(a, b) {
 function reset() {
   bullets.length = 0;
   enemies.length = 0;
+  pickups.length = 0;
 
   player.x = 60;
   player.y = 200;
@@ -239,7 +246,6 @@ function endDragOrTap(e) {
     dragActive = false;
     dragPointerId = null;
   }
-  // end "shoot sprite" state + re-arm shooting
   spaceHeld = false;
   canShoot = true;
 }
@@ -267,6 +273,25 @@ function takeHit(removeEnemyIndex) {
     alive = false;
     restartBtn.style.display = "block";
   }
+}
+
+// Heart drawing (no asset needed)
+function drawHeart(x, y, w, h) {
+  const cx = x + w / 2;
+  const top = y + h * 0.35;
+  const bottom = y + h;
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(cx, bottom);
+
+  ctx.bezierCurveTo(x, y + h * 0.70, x, top, cx, top);
+  ctx.bezierCurveTo(x + w, top, x + w, y + h * 0.70, cx, bottom);
+
+  ctx.closePath();
+  ctx.fillStyle = "#ff4d6d"; // tiny heart color
+  ctx.fill();
+  ctx.restore();
 }
 
 function update(dt) {
@@ -311,12 +336,14 @@ function update(dt) {
     const w = ENEMY_BASE_W * scale;
     const h = ENEMY_BASE_H * scale;
 
+    const enemySpeed = 120 + Math.random() * 160;
+
     enemies.push({
       x: BASE_W + 20,
       y: Math.random() * (BASE_H - h),
       w,
       h,
-      speed: 120 + Math.random() * 160,
+      speed: enemySpeed,
       img: enemyImage,
 
       wiggleXSpeed: 4 + Math.random() * 3,
@@ -326,6 +353,27 @@ function update(dt) {
       wigglePhaseX: Math.random() * Math.PI * 2,
       wigglePhaseY: Math.random() * Math.PI * 2,
     });
+
+    // Rare heart pickup (comes in like an enemy, but smaller)
+    if (Math.random() < HEART_SPAWN_CHANCE) {
+      const hw = HEART_BASE_W * (0.9 + Math.random() * 0.2);
+      const hh = HEART_BASE_H * (0.9 + Math.random() * 0.2);
+
+      pickups.push({
+        type: "heart",
+        x: BASE_W + 20 + 18, // slightly offset from enemy spawn
+        y: Math.random() * (BASE_H - hh),
+        w: hw,
+        h: hh,
+        speed: enemySpeed * 0.95, // roughly matches enemy pace
+        phaseX: Math.random() * Math.PI * 2,
+        phaseY: Math.random() * Math.PI * 2,
+        wiggleXSpeed: 5 + Math.random() * 3,
+        wiggleYSpeed: 5 + Math.random() * 3,
+        wiggleXAmount: 0.08 + Math.random() * 0.04,
+        wiggleYAmount: 0.08 + Math.random() * 0.04,
+      });
+    }
 
     spawnTimer = 0.65;
   }
@@ -340,6 +388,16 @@ function update(dt) {
     if (e.x + e.w < 0) enemies.splice(i, 1);
   }
 
+  // Pickups move + wiggle phases
+  for (let i = pickups.length - 1; i >= 0; i--) {
+    const p = pickups[i];
+    p.x -= p.speed * dt;
+    p.phaseX += p.wiggleXSpeed * dt;
+    p.phaseY += p.wiggleYSpeed * dt;
+
+    if (p.x + p.w < 0) pickups.splice(i, 1);
+  }
+
   // Bullet-enemy collisions
   for (let ei = enemies.length - 1; ei >= 0; ei--) {
     for (let bi = bullets.length - 1; bi >= 0; bi--) {
@@ -349,6 +407,17 @@ function update(dt) {
         score += 10;
         break;
       }
+    }
+  }
+
+  // Player-pickup collisions (hearts restore 1 HP)
+  for (let pi = pickups.length - 1; pi >= 0; pi--) {
+    const p = pickups[pi];
+    if (aabb(player, p)) {
+      if (p.type === "heart") {
+        hp = Math.min(MAX_HP, hp + 1);
+      }
+      pickups.splice(pi, 1);
     }
   }
 
@@ -376,6 +445,18 @@ function draw() {
   // Bullets
   for (const b of bullets) {
     if (bulletImage.complete) ctx.drawImage(bulletImage, b.x, b.y, b.w, b.h);
+  }
+
+  // Pickups (hearts)
+  for (const p of pickups) {
+    const sx = 1 + Math.sin(p.phaseX) * p.wiggleXAmount;
+    const sy = 1 + Math.sin(p.phaseY) * p.wiggleYAmount;
+
+    ctx.save();
+    ctx.translate(p.x + p.w / 2, p.y + p.h / 2);
+    ctx.scale(sx, sy);
+    drawHeart(-p.w / 2, -p.h / 2, p.w, p.h);
+    ctx.restore();
   }
 
   // Enemies (wiggle)
