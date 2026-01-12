@@ -4,6 +4,13 @@ const ctx = canvas.getContext("2d");
 const BASE_W = 800;
 const BASE_H = 450;
 
+// Enemy sprite sheet (enemy-sprite-brain.png)
+// 3 frames, 119x111 each. Sequence: 1,2,3,2, repeat.
+const ENEMY_FRAME_W = 119;
+const ENEMY_FRAME_H = 111;
+const ENEMY_FRAME_SEQUENCE = [0, 1, 2, 1];
+const ENEMY_ANIM_FPS = 8;
+
 // Enemy art base (source is 62x80, enemies always smaller)
 const ENEMY_BASE_W = 62 * 0.7;
 const ENEMY_BASE_H = 80 * 0.7;
@@ -11,12 +18,18 @@ const ENEMY_BASE_H = 80 * 0.7;
 // Player HP
 const MAX_HP = 4;
 const IFRAME_SECONDS = 1.0;
-const HEAL_FLASH_SECONDS = 0.35;
 
-// Heart pickup
-const HEART_SPAWN_CHANCE = 0.03;
-const HEART_BASE_W = 18;
-const HEART_BASE_H = 16;
+// Heal flash + pop
+const HEART_COLOR = "#ff4d6d";
+const HEAL_FLASH_MAX_ALPHA = 0.85;
+const HEAL_FLASH_TOTAL_SECONDS = 0.65; // longer overall
+const HEAL_FLASH_PULSE_SECONDS = 0.28; // first part: 2 quick flashes
+const HEAL_POP_FRAMES = 2; // exactly 2 frames
+
+// Heart pickup (tuned so you can actually see them)
+const HEART_SPAWN_CHANCE = 0.06; // was 0.03
+const HEART_BASE_W = 22;         // was 18
+const HEART_BASE_H = 20;         // was 16
 
 ctx.imageSmoothingEnabled = false;
 
@@ -27,8 +40,8 @@ playerImage.src = "artist.png";
 const playerShootImage = new Image();
 playerShootImage.src = "artist2.png";
 
-const enemyImage = new Image();
-enemyImage.src = "enemy-brain4.png";
+const enemySprite = new Image();
+enemySprite.src = "enemy-sprite-brain.png";
 
 const bulletImage = new Image();
 bulletImage.src = "bullet.png";
@@ -105,6 +118,10 @@ const bullets = [];
 const enemies = [];
 const pickups = [];
 
+// Enemy animation state
+let enemyAnimAccum = 0;
+let enemyAnimStep = 0;
+
 let lastTime = performance.now();
 let spawnTimer = 0;
 let score = 0;
@@ -112,7 +129,9 @@ let alive = true;
 
 let hp = MAX_HP;
 let iFrameTimer = 0;
+
 let healFlashTimer = 0;
+let healPopFrames = 0;
 
 // Restart button
 const restartBtn = document.createElement("button");
@@ -161,7 +180,9 @@ function reset() {
 
   hp = MAX_HP;
   iFrameTimer = 0;
+
   healFlashTimer = 0;
+  healPopFrames = 0;
 
   canShoot = true;
   spaceHeld = false;
@@ -169,6 +190,9 @@ function reset() {
 
   dragActive = false;
   dragPointerId = null;
+
+  enemyAnimAccum = 0;
+  enemyAnimStep = 0;
 }
 
 // Shooting
@@ -179,7 +203,7 @@ function shootBullet() {
     y: player.y + (player.h - 10) / 2 + 3,
     w: 44,
     h: 10,
-    speed: 420,
+    speed: 350,
   });
 }
 
@@ -262,16 +286,56 @@ function drawHeart(x, y, w, h) {
   ctx.moveTo(cx, y + h);
   ctx.bezierCurveTo(x, y + h * 0.7, x, y + h * 0.35, cx, y + h * 0.35);
   ctx.bezierCurveTo(x + w, y + h * 0.35, x + w, y + h * 0.7, cx, y + h);
-  ctx.fillStyle = "#ff4d6d";
+  ctx.fillStyle = HEART_COLOR;
   ctx.fill();
+
+  // tiny outline so it pops on black
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = "rgba(255,255,255,0.15)";
+  ctx.stroke();
+}
+
+// Heal flash intensity
+function getHealFlashAlpha() {
+  if (healFlashTimer <= 0) return 0;
+
+  const elapsed = HEAL_FLASH_TOTAL_SECONDS - healFlashTimer;
+
+  if (elapsed <= HEAL_FLASH_PULSE_SECONDS) {
+    const p = elapsed / HEAL_FLASH_PULSE_SECONDS; // 0..1
+    const wave = Math.max(0, Math.sin(p * Math.PI * 4)); // 2 positive lobes
+    return HEAL_FLASH_MAX_ALPHA * wave;
+  }
+
+  const tailElapsed = elapsed - HEAL_FLASH_PULSE_SECONDS;
+  const tailDur = HEAL_FLASH_TOTAL_SECONDS - HEAL_FLASH_PULSE_SECONDS;
+  const t = clamp(tailElapsed / tailDur, 0, 1);
+  const easeOut = 1 - Math.pow(t, 2);
+  return HEAL_FLASH_MAX_ALPHA * easeOut * 0.9;
+}
+
+// Player pop scale for exactly 2 frames
+function getHealPopScale() {
+  if (healPopFrames <= 0) return 1;
+  const frameIndex = HEAL_POP_FRAMES - healPopFrames; // 0 then 1
+  return frameIndex === 0 ? 1.10 : 1.06;
 }
 
 // Update loop
 function update(dt) {
   if (!alive) return;
 
-  if (iFrameTimer > 0) iFrameTimer -= dt;
-  if (healFlashTimer > 0) healFlashTimer -= dt;
+  if (iFrameTimer > 0) iFrameTimer = Math.max(0, iFrameTimer - dt);
+  if (healFlashTimer > 0) healFlashTimer = Math.max(0, healFlashTimer - dt);
+  if (healPopFrames > 0) healPopFrames--;
+
+  // Enemy sprite animation (global)
+  enemyAnimAccum += dt;
+  const frameDur = 1 / ENEMY_ANIM_FPS;
+  while (enemyAnimAccum >= frameDur) {
+    enemyAnimAccum -= frameDur;
+    enemyAnimStep = (enemyAnimStep + 1) % ENEMY_FRAME_SEQUENCE.length;
+  }
 
   // Desktop movement
   if (!isTouchDevice) {
@@ -299,7 +363,7 @@ function update(dt) {
   // Spawn enemies + hearts
   spawnTimer -= dt;
   if (spawnTimer <= 0) {
-    const scale = 0.6 + Math.random() * 0.15;
+    const scale = 0.6 + Math.random() * 0.15; // always smaller
     const w = ENEMY_BASE_W * scale;
     const h = ENEMY_BASE_H * scale;
     const speed = 120 + Math.random() * 160;
@@ -328,6 +392,7 @@ function update(dt) {
     spawnTimer = 0.65;
   }
 
+  // Move enemies + pickups
   enemies.forEach((e) => {
     e.x -= e.speed * dt;
     e.phaseX += dt * 6;
@@ -338,6 +403,14 @@ function update(dt) {
     p.x -= p.speed * dt;
     p.phase += dt * 6;
   });
+
+  // Cleanup offscreen enemies/pickups
+  for (let i = enemies.length - 1; i >= 0; i--) {
+    if (enemies[i].x + enemies[i].w < 0) enemies.splice(i, 1);
+  }
+  for (let i = pickups.length - 1; i >= 0; i--) {
+    if (pickups[i].x + pickups[i].w < 0) pickups.splice(i, 1);
+  }
 
   // Bullet vs enemy
   for (let ei = enemies.length - 1; ei >= 0; ei--) {
@@ -354,10 +427,11 @@ function update(dt) {
   // Player vs heart
   for (let i = pickups.length - 1; i >= 0; i--) {
     if (aabb(player, pickups[i])) {
-      if (hp < MAX_HP) {
-        hp++;
-        healFlashTimer = HEAL_FLASH_SECONDS;
-      }
+      // Always show feedback so it feels "working"
+      healFlashTimer = HEAL_FLASH_TOTAL_SECONDS;
+      healPopFrames = HEAL_POP_FRAMES;
+
+      if (hp < MAX_HP) hp++;
       pickups.splice(i, 1);
     }
   }
@@ -377,33 +451,74 @@ function draw() {
 
   const flicker = iFrameTimer > 0 && Math.floor(iFrameTimer * 20) % 2 === 0;
 
+  // Player
   if (!flicker) {
     const img = spaceHeld ? playerShootImage : playerImage;
-    if (healFlashTimer > 0) {
-      ctx.drawImage(img, player.x, player.y, player.w, player.h);
-      ctx.globalCompositeOperation = "source-atop";
-      ctx.fillStyle = "rgba(255,255,255,0.62)";
-      ctx.fillRect(player.x, player.y, player.w, player.h);
-      ctx.globalCompositeOperation = "source-over";
-    } else {
-      ctx.drawImage(img, player.x, player.y, player.w, player.h);
+    const popScale = getHealPopScale();
+
+    if (img.complete) {
+      ctx.save();
+      ctx.translate(player.x + player.w / 2, player.y + player.h / 2);
+      ctx.scale(popScale, popScale);
+      ctx.drawImage(img, -player.w / 2, -player.h / 2, player.w, player.h);
+
+      const alpha = getHealFlashAlpha();
+      if (alpha > 0) {
+        ctx.globalCompositeOperation = "source-atop";
+        ctx.fillStyle = `rgba(255,77,109,${alpha})`;
+        ctx.fillRect(-player.w / 2, -player.h / 2, player.w, player.h);
+        ctx.globalCompositeOperation = "source-over";
+      }
+
+      ctx.restore();
     }
   }
 
-  bullets.forEach((b) => ctx.drawImage(bulletImage, b.x, b.y, b.w, b.h));
+  // Bullets
+  for (const b of bullets) {
+    if (bulletImage.complete) ctx.drawImage(bulletImage, b.x, b.y, b.w, b.h);
+  }
 
-  pickups.forEach((p) => drawHeart(p.x, p.y, p.w, p.h));
+  // Pickups (hearts)
+  for (const p of pickups) {
+    const sx = 1 + Math.sin(p.phase) * 0.10;
+    const sy = 1 + Math.cos(p.phase) * 0.10;
 
-  enemies.forEach((e) => {
+    ctx.save();
+    ctx.translate(p.x + p.w / 2, p.y + p.h / 2);
+    ctx.scale(sx, sy);
+    drawHeart(-p.w / 2, -p.h / 2, p.w, p.h);
+    ctx.restore();
+  }
+
+  // Enemies (wiggle) — animated sprite
+  for (const e of enemies) {
     const sx = 1 + Math.sin(e.phaseX) * 0.06;
     const sy = 1 + Math.sin(e.phaseY) * 0.06;
+
+    if (!enemySprite.complete) continue;
+
+    const frame = ENEMY_FRAME_SEQUENCE[enemyAnimStep];
+    const sxSrc = frame * ENEMY_FRAME_W;
+
     ctx.save();
     ctx.translate(e.x + e.w / 2, e.y + e.h / 2);
     ctx.scale(sx, sy);
-    ctx.drawImage(enemyImage, -e.w / 2, -e.h / 2, e.w, e.h);
+    ctx.drawImage(
+      enemySprite,
+      sxSrc,
+      0,
+      ENEMY_FRAME_W,
+      ENEMY_FRAME_H,
+      -e.w / 2,
+      -e.h / 2,
+      e.w,
+      e.h
+    );
     ctx.restore();
-  });
+  }
 
+  // UI
   ctx.fillStyle = "#e5e7eb";
   ctx.font = "16px system-ui, sans-serif";
   ctx.fillText(`Score: ${score}`, 12, 24);
