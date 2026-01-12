@@ -36,6 +36,8 @@ const SANDWICH_ENEMY_CHANCE = 0.15; // 15% of enemies drop sandwiches
 const SANDWICH_VALUE = 1; // was 100
 const SANDWICH_BASE_W = 24;
 const SANDWICH_BASE_H = 24;
+const SANDWICH_GRAVITY = 800; // pixels per second squared
+const SANDWICH_BOUNCE = 0.3; // bounce factor when hitting ground
 
 // Enemy spawn boundaries
 const ENEMY_SPAWN_MARGIN_TOP = 40;
@@ -446,7 +448,22 @@ function update(dt) {
   });
 
   sandwichPickups.forEach((s) => {
-    // Remove movement so sandwiches stay in place
+    // Apply gravity
+    s.velocityY = (s.velocityY || 0) + SANDWICH_GRAVITY * dt;
+    s.y += s.velocityY * dt;
+    
+    // Check ground collision
+    const groundY = BASE_H - s.h;
+    if (s.y >= groundY) {
+      s.y = groundY;
+      s.velocityY *= -SANDWICH_BOUNCE; // bounce
+      
+      // Stop bouncing if velocity is too low
+      if (Math.abs(s.velocityY) < 50) {
+        s.velocityY = 0;
+      }
+    }
+    
     s.phase += dt * 8; // keep animation
   });
 
@@ -474,7 +491,7 @@ function update(dt) {
             y: enemy.y + enemy.h / 2 - SANDWICH_BASE_H / 2,
             w: SANDWICH_BASE_W,
             h: SANDWICH_BASE_H,
-            speed: enemy.speed * 0.8,
+            velocityY: 0, // initial downward velocity
             phase: Math.random() * Math.PI * 2,
           });
         }
