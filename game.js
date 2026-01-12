@@ -9,14 +9,14 @@ const BASE_H = 450;
 const ENEMY_FRAME_W = 119;
 const ENEMY_FRAME_H = 111;
 const ENEMY_FRAME_SEQUENCE = [0, 1, 2, 1];
-const ENEMY_ANIM_FPS = 8;
+const ENEMY_ANIM_FPS = 6; 
 
 // Enemy art base (source is 62x80, enemies always smaller)
 const ENEMY_BASE_W = 62 * 0.7;
 const ENEMY_BASE_H = 80 * 0.7;
 
 // Player HP
-const MAX_HP = 4;
+const MAX_HP = 3;
 const IFRAME_SECONDS = 1.0;
 
 // Heal flash + pop
