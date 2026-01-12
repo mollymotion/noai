@@ -363,9 +363,10 @@ function update(dt) {
   // Spawn enemies + hearts
   spawnTimer -= dt;
   if (spawnTimer <= 0) {
-    const scale = 0.6 + Math.random() * 0.15; // always smaller
-    const w = ENEMY_BASE_W * scale;
-    const h = ENEMY_BASE_H * scale;
+    const scale = 0.4 + Math.random() * 0.15;
+    // Use sprite aspect ratio (119x111) instead of base dimensions
+    const w = ENEMY_FRAME_W * scale * 0.4; // scale down from sprite size
+    const h = ENEMY_FRAME_H * scale * 0.4;
     const speed = 120 + Math.random() * 160;
 
     enemies.push({
@@ -493,8 +494,9 @@ function draw() {
 
   // Enemies (wiggle) — animated sprite
   for (const e of enemies) {
-    const sx = 1 + Math.sin(e.phaseX) * 0.06;
-    const sy = 1 + Math.sin(e.phaseY) * 0.06;
+    const wiggle = 1 + Math.sin(e.phaseX) * 0.06;
+    const sx = wiggle;
+    const sy = wiggle;
 
     if (!enemySprite.complete) continue;
 
