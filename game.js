@@ -28,16 +28,14 @@ const HEAL_POP_FRAMES = 2; // exactly 2 frames
 
 // Heart pickup (tuned so you can actually see them)
 const HEART_SPAWN_CHANCE = 0.06; // was 0.03
-const HEART_BASE_W = 18;         // was 22
-const HEART_BASE_H = 16;         // was 20
+const HEART_BASE_W = 22;         // was 18
+const HEART_BASE_H = 20;         // was 16
 
-// Sandwich system
-const SANDWICH_ENEMY_CHANCE = 0.15; // 15% of enemies drop sandwiches
-const SANDWICH_VALUE = 1; // was 100
-const SANDWICH_BASE_W = 24;
-const SANDWICH_BASE_H = 24;
-const SANDWICH_GRAVITY = 800; // pixels per second squared
-const SANDWICH_BOUNCE = 0.3; // bounce factor when hitting ground
+// Cash system
+const CASH_ENEMY_CHANCE = 0.15; // 15% of enemies drop cash
+const CASH_VALUE = 100;
+const CASH_BASE_W = 24;
+const CASH_BASE_H = 24;
 
 // Enemy spawn boundaries
 const ENEMY_SPAWN_MARGIN_TOP = 40;
@@ -60,9 +58,6 @@ bulletImage.src = "bullet.png";
 
 const cashImage = new Image();
 cashImage.src = "cash.png";
-
-const sandwichImage = new Image();
-sandwichImage.src = "sandwich.png";
 
 // Input
 const keys = new Set();
@@ -135,7 +130,7 @@ const player = { x: 60, y: 200, w: 62, h: 62, speed: 260 };
 const bullets = [];
 const enemies = [];
 const pickups = [];
-const sandwichPickups = [];
+const cashPickups = [];
 
 // Enemy animation state
 let enemyAnimAccum = 0;
@@ -144,7 +139,7 @@ let enemyAnimStep = 0;
 let lastTime = performance.now();
 let spawnTimer = 0;
 let score = 0;
-let sandwiches = 0;
+let cash = 0;
 let alive = true;
 
 let hp = MAX_HP;
@@ -190,13 +185,13 @@ function reset() {
   bullets.length = 0;
   enemies.length = 0;
   pickups.length = 0;
-  sandwichPickups.length = 0;
+  cashPickups.length = 0;
 
   player.x = 60;
   player.y = 200;
 
   score = 0;
-  sandwiches = 0;
+  cash = 0;
   alive = true;
   spawnTimer = 0.3;
 
@@ -304,19 +299,10 @@ function takeHit(enemyIndex) {
 // Draw heart
 function drawHeart(x, y, w, h) {
   const cx = x + w / 2;
-  
   ctx.beginPath();
-  // Start at bottom point
   ctx.moveTo(cx, y + h);
-  
-  // Left lobe - from bottom point to left curve
-  ctx.bezierCurveTo(x, y + h * 0.6, x, y, x + w * 0.25, y);
-  ctx.bezierCurveTo(x + w * 0.5, y, x + w * 0.5, y + h * 0.3, cx, y + h * 0.4);
-  
-  // Right lobe - from center dip to right curve  
-  ctx.bezierCurveTo(x + w * 0.5, y + h * 0.3, x + w * 0.5, y, x + w * 0.75, y);
-  ctx.bezierCurveTo(x + w, y, x + w, y + h * 0.6, cx, y + h);
-  
+  ctx.bezierCurveTo(x, y + h * 0.7, x, y + h * 0.35, cx, y + h * 0.35);
+  ctx.bezierCurveTo(x + w, y + h * 0.35, x + w, y + h * 0.7, cx, y + h);
   ctx.fillStyle = HEART_COLOR;
   ctx.fill();
 
@@ -413,7 +399,7 @@ function update(dt) {
       speed,
       phaseX: Math.random() * Math.PI * 2,
       phaseY: Math.random() * Math.PI * 2,
-      dropsSandwich: Math.random() < SANDWICH_ENEMY_CHANCE, // Mark sandwich-dropping enemies
+      dropsCash: Math.random() < CASH_ENEMY_CHANCE, // Mark cash-dropping enemies
     });
 
     if (Math.random() < HEART_SPAWN_CHANCE) {
@@ -447,24 +433,9 @@ function update(dt) {
     p.phase += dt * 6;
   });
 
-  sandwichPickups.forEach((s) => {
-    // Apply gravity
-    s.velocityY = (s.velocityY || 0) + SANDWICH_GRAVITY * dt;
-    s.y += s.velocityY * dt;
-    
-    // Check ground collision
-    const groundY = BASE_H - s.h;
-    if (s.y >= groundY) {
-      s.y = groundY;
-      s.velocityY *= -SANDWICH_BOUNCE; // bounce
-      
-      // Stop bouncing if velocity is too low
-      if (Math.abs(s.velocityY) < 50) {
-        s.velocityY = 0;
-      }
-    }
-    
-    s.phase += dt * 8; // keep animation
+  cashPickups.forEach((c) => {
+    c.x -= c.speed * dt;
+    c.phase += dt * 8; // slightly faster animation
   });
 
   // Cleanup offscreen enemies/pickups
@@ -474,8 +445,8 @@ function update(dt) {
   for (let i = pickups.length - 1; i >= 0; i--) {
     if (pickups[i].x + pickups[i].w < 0) pickups.splice(i, 1);
   }
-  for (let i = sandwichPickups.length - 1; i >= 0; i--) {
-    if (sandwichPickups[i].x + sandwichPickups[i].w < 0) sandwichPickups.splice(i, 1);
+  for (let i = cashPickups.length - 1; i >= 0; i--) {
+    if (cashPickups[i].x + cashPickups[i].w < 0) cashPickups.splice(i, 1);
   }
 
   // Bullet vs enemy
@@ -484,14 +455,14 @@ function update(dt) {
       if (aabb(enemies[ei], bullets[bi])) {
         const enemy = enemies[ei];
         
-        // Check if enemy drops sandwich
-        if (enemy.dropsSandwich) {
-          sandwichPickups.push({
-            x: enemy.x + enemy.w / 2 - SANDWICH_BASE_W / 2,
-            y: enemy.y + enemy.h / 2 - SANDWICH_BASE_H / 2,
-            w: SANDWICH_BASE_W,
-            h: SANDWICH_BASE_H,
-            velocityY: 0, // initial downward velocity
+        // Check if enemy drops cash
+        if (enemy.dropsCash) {
+          cashPickups.push({
+            x: enemy.x + enemy.w / 2 - CASH_BASE_W / 2,
+            y: enemy.y + enemy.h / 2 - CASH_BASE_H / 2,
+            w: CASH_BASE_W,
+            h: CASH_BASE_H,
+            speed: enemy.speed * 0.8,
             phase: Math.random() * Math.PI * 2,
           });
         }
@@ -516,11 +487,11 @@ function update(dt) {
     }
   }
 
-  // Player vs sandwich
-  for (let i = sandwichPickups.length - 1; i >= 0; i--) {
-    if (aabb(player, sandwichPickups[i])) {
-      sandwiches += SANDWICH_VALUE;
-      sandwichPickups.splice(i, 1);
+  // Player vs cash
+  for (let i = cashPickups.length - 1; i >= 0; i--) {
+    if (aabb(player, cashPickups[i])) {
+      cash += CASH_VALUE;
+      cashPickups.splice(i, 1);
     }
   }
 
@@ -579,16 +550,16 @@ function draw() {
     ctx.restore();
   }
 
-  // Sandwich pickups
-  for (const s of sandwichPickups) {
-    const sx = 1 + Math.sin(s.phase) * 0.12;
-    const sy = 1 + Math.cos(s.phase) * 0.12;
+  // Cash pickups
+  for (const c of cashPickups) {
+    const sx = 1 + Math.sin(c.phase) * 0.12;
+    const sy = 1 + Math.cos(c.phase) * 0.12;
 
-    if (sandwichImage.complete) {
+    if (cashImage.complete) {
       ctx.save();
-      ctx.translate(s.x + s.w / 2, s.y + s.h / 2);
+      ctx.translate(c.x + c.w / 2, c.y + c.h / 2);
       ctx.scale(sx, sy);
-      ctx.drawImage(sandwichImage, -s.w / 2, -s.h / 2, s.w, s.h);
+      ctx.drawImage(cashImage, -c.w / 2, -c.h / 2, c.w, c.h);
       ctx.restore();
     }
   }
@@ -626,7 +597,7 @@ function draw() {
   ctx.fillStyle = "#e5e7eb";
   ctx.font = "16px system-ui, sans-serif";
   ctx.fillText(`Score: ${score}`, 12, 24);
-  ctx.fillText(`Sandwiches: ${sandwiches}`, 12, 44);
+  ctx.fillText(`Cash: ${cash}`, 12, 44);
 
   const hearts = "♥".repeat(hp) + "♡".repeat(MAX_HP - hp);
   ctx.fillText(`HP: ${hearts}`, 12, 64);
