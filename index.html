@@ -95,6 +95,15 @@
       background: rgba(153, 153, 153, 0.3);
     }
 
+    /* Style the Stripe button */
+    stripe-buy-button {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%) scale(0.8);
+      z-index: 20;
+    }
+
   </style>
 </head>
 
@@ -135,6 +144,15 @@
 
     window.addEventListener("pointerdown", hideHint, { once: true });
   </script>
+
+  <!-- Stripe buy button -->
+  <script async src="https://js.stripe.com/v3/buy-button.js"></script>
+  
+  <stripe-buy-button
+    buy-button-id="buy_btn_1Sr3ET2MkeJ1hTYvgr9BeTVf"
+    publishable-key="pk_live_51SqzP72MkeJ1hTYvTTZvERfjJqHLCGtJZks26h8ZffbYYLlIm80ApwXPvNUSWVnuMrgBbvTDGTwRPji51EqoGxV000qOgHYQLY"
+  >
+  </stripe-buy-button>
 
 </body>
 </html>
