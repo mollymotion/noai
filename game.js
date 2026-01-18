@@ -35,6 +35,9 @@ const HEART_BASE_H = 20;         // was 16
 const ENEMY_SPAWN_MARGIN_TOP = 40;
 const ENEMY_SPAWN_MARGIN_BOTTOM = 40;
 
+// UI margin to prevent gameplay overlap
+const UI_MARGIN_TOP = 40;
+
 ctx.imageSmoothingEnabled = false;
 
 // Images
@@ -250,7 +253,7 @@ function movePointer(e) {
   if (!dragActive || e.pointerId !== dragPointerId) return;
   const { x, y } = pointerToGameXY(e.clientX, e.clientY);
   player.x = clamp(x - dragOffsetX, 0, BASE_W - player.w);
-  player.y = clamp(y - dragOffsetY, 0, BASE_H - player.h);
+  player.y = clamp(y - dragOffsetY, UI_MARGIN_TOP, BASE_H - player.h);
   e.preventDefault();
 }
 
@@ -356,7 +359,7 @@ function update(dt) {
     vy /= len;
 
     player.x = clamp(player.x + vx * player.speed * dt, 0, BASE_W - player.w);
-    player.y = clamp(player.y + vy * player.speed * dt, 0, BASE_H - player.h);
+    player.y = clamp(player.y + vy * player.speed * dt, UI_MARGIN_TOP, BASE_H - player.h);
   }
 
   // Bullets
@@ -374,8 +377,8 @@ function update(dt) {
     const h = ENEMY_FRAME_H * scale * 0.4;
     const speed = 120 + Math.random() * 160;
 
-    // Calculate safe spawn area accounting for enemy size and margins
-    const minY = ENEMY_SPAWN_MARGIN_TOP;
+    // Calculate safe spawn area - ensure player can reach enemies
+    const minY = Math.max(ENEMY_SPAWN_MARGIN_TOP, UI_MARGIN_TOP + 30); // Add buffer for player reach
     const maxY = BASE_H - ENEMY_SPAWN_MARGIN_BOTTOM - h;
     const spawnY = minY + Math.random() * (maxY - minY);
 
@@ -390,8 +393,8 @@ function update(dt) {
     });
 
     if (Math.random() < HEART_SPAWN_CHANCE) {
-      // Hearts also respect the spawn margins
-      const heartMinY = ENEMY_SPAWN_MARGIN_TOP;
+      // Hearts also respect the spawn margins and UI area
+      const heartMinY = Math.max(ENEMY_SPAWN_MARGIN_TOP, UI_MARGIN_TOP);
       const heartMaxY = BASE_H - ENEMY_SPAWN_MARGIN_BOTTOM - HEART_BASE_H;
       const heartSpawnY = heartMinY + Math.random() * (heartMaxY - heartMinY);
 
@@ -443,11 +446,12 @@ function update(dt) {
   // Player vs heart
   for (let i = pickups.length - 1; i >= 0; i--) {
     if (aabb(player, pickups[i])) {
-      // Always show feedback so it feels "working"
-      healFlashTimer = HEAL_FLASH_TOTAL_SECONDS;
-      healPopFrames = HEAL_POP_FRAMES;
-
-      if (hp < MAX_HP) hp++;
+      if (hp < MAX_HP) {
+        // Only show feedback when actually healing
+        healFlashTimer = HEAL_FLASH_TOTAL_SECONDS;
+        healPopFrames = HEAL_POP_FRAMES;
+        hp++;
+      }
       pickups.splice(i, 1);
     }
   }
@@ -539,10 +543,9 @@ function draw() {
   // UI
   ctx.fillStyle = "#e5e7eb";
   ctx.font = "16px system-ui, sans-serif";
-  ctx.fillText(`Score: ${score}`, 12, 24);
-
+  
   const hearts = "♥".repeat(hp) + "♡".repeat(MAX_HP - hp);
-  ctx.fillText(`HP: ${hearts}`, 12, 44);
+  ctx.fillText(`Score: ${score}    HP: ${hearts}`, 12, 24);
 
   if (!alive) {
     ctx.font = "28px system-ui, sans-serif";
