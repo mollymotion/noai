@@ -102,7 +102,8 @@ window.addEventListener("keyup", (e) => {
 // Resize canvas
 function resizeCanvas() {
   const dpr = Math.max(1, window.devicePixelRatio || 1);
-  const scale = Math.min(window.innerWidth / BASE_W, window.innerHeight / BASE_H);
+  const availableHeight = window.innerHeight - 250; // Reserve 250px for description area
+  const scale = Math.min(window.innerWidth / BASE_W, availableHeight / BASE_H);
 
   canvas.style.width = `${Math.floor(BASE_W * scale)}px`;
   canvas.style.height = `${Math.floor(BASE_H * scale)}px`;

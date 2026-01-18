@@ -73,7 +73,7 @@
     /* ───────── Game blurb (below canvas) ───────── */
     #game-blurb {
       position: absolute;
-      bottom: 20px;
+      bottom: 80px;
       left: 50%;
       transform: translateX(-50%);
       color: #999;
@@ -81,6 +81,25 @@
       text-align: center;
       z-index: 10;
       pointer-events: none;
+    }
+
+    /* Subtle divider above description */
+    #game-blurb::before {
+      content: '';
+      position: absolute;
+      top: -20px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 100px;
+      height: 1px;
+      background: rgba(153, 153, 153, 0.3);
+    }
+
+    /* Center the Ko-fi button */
+    .floatingchat-container-wrap {
+      left: 50% !important;
+      right: auto !important;
+      transform: translateX(-50%) !important;
     }
 
   </style>
@@ -122,6 +141,18 @@
     }
 
     window.addEventListener("pointerdown", hideHint, { once: true });
+  </script>
+
+  <!-- Ko-fi donation widget -->
+  <script src='https://storage.ko-fi.com/cdn/scripts/overlay-widget.js'></script>
+  <script>
+    kofiWidgetOverlay.draw('noaigames', {
+      'type': 'floating-chat',
+      'floating-chat.donateButton.text': 'Support me',
+      'floating-chat.donateButton.background-color': '#00b9fe',
+      'floating-chat.donateButton.text-color': '#fff',
+      'floating-chat.donateButton.bottom-margin': '20px'
+    });
   </script>
 </body>
 </html>
