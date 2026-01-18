@@ -70,6 +70,19 @@
       #mobile-instructions { display: none; }
     }
 
+    /* ───────── Game blurb (below canvas) ───────── */
+    #game-blurb {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: #999;
+      font: italic 14px system-ui, sans-serif;
+      text-align: center;
+      z-index: 10;
+      pointer-events: none;
+    }
+
   </style>
 </head>
 
@@ -86,6 +99,11 @@
     <div id="mobile-instructions">
       Drag the player to move<br>
       Tap with your other thumb to shoot
+    </div>
+
+    <!-- Game blurb -->
+    <div id="game-blurb">
+      A game for artists processing complicated feelings about AI.
     </div>
 
   </div>
