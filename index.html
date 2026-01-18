@@ -9,10 +9,13 @@
   <style>
     html, body {
       margin: 0;
-      height: 100%;
       background: #111;
-      overflow: hidden;
       touch-action: none;
+      overflow-x: hidden;
+    }
+
+    body {
+      min-height: calc(100vh + 200px); /* Add extra height for scrolling */
     }
 
     #wrap {
@@ -97,11 +100,25 @@
 
     /* Style the Stripe button */
     stripe-buy-button {
-      position: fixed;
-      bottom: 20px;
+      position: absolute;
+      bottom: 10px;
       left: 50%;
       transform: translateX(-50%) scale(0.8);
       z-index: 20;
+    }
+
+    /* Additional description below the fold */
+    #additional-description {
+      position: relative;
+      margin-top: 10px;
+      color: #999;
+      font: 12px system-ui, sans-serif;
+      text-align: center;
+      max-width: 400px;
+      line-height: 1.4;
+      margin-left: auto;
+      margin-right: auto;
+      padding-bottom: 40px;
     }
 
   </style>
@@ -124,9 +141,16 @@
 
     <!-- Game blurb -->
     <div id="game-blurb">
-      A game for artists processing complicated feelings about AI.
+A game for artists processing complicated feelings about AI.
+
     </div>
 
+  </div>
+
+  <!-- Additional description -->
+  <div id="additional-description">
+    This is a small browser-based game built with JavaScript and HTML5 Canvas.<br>
+    It's a personal creative project designed for short play sessions and casual interaction.
   </div>
 
   <script src="game.js"></script>
