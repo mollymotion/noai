@@ -95,13 +95,6 @@
       background: rgba(153, 153, 153, 0.3);
     }
 
-    /* Center the Ko-fi button */
-    .floatingchat-container-wrap {
-      left: 50% !important;
-      right: auto !important;
-      transform: translateX(-50%) scale(0.8) !important;
-    }
-
   </style>
 </head>
 
@@ -143,16 +136,5 @@
     window.addEventListener("pointerdown", hideHint, { once: true });
   </script>
 
-  <!-- Ko-fi donation widget -->
-  <script src='https://storage.ko-fi.com/cdn/scripts/overlay-widget.js'></script>
-  <script>
-    kofiWidgetOverlay.draw('noaigames', {
-      'type': 'floating-chat',
-      'floating-chat.donateButton.text': 'Support me',
-      'floating-chat.donateButton.background-color': '#00b9fe',
-      'floating-chat.donateButton.text-color': '#fff',
-      'floating-chat.donateButton.bottom-margin': '20px'
-    });
-  </script>
 </body>
 </html>
