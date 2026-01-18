@@ -289,8 +289,8 @@ function drawHeart(x, y, w, h) {
   const cx = x + w / 2;
   ctx.beginPath();
   ctx.moveTo(cx, y + h);
-  ctx.bezierCurveTo(x, y + h * 0.7, x, y + h * 0.35, cx, y + h * 0.35);
-  ctx.bezierCurveTo(x + w, y + h * 0.35, x + w, y + h * 0.7, cx, y + h);
+  ctx.bezierCurveTo(x, y + h * 0.7, x, y + h * 0.25, cx, y + h * 0.45);
+  ctx.bezierCurveTo(x + w, y + h * 0.25, x + w, y + h * 0.7, cx, y + h);
   ctx.fillStyle = HEART_COLOR;
   ctx.fill();
 
