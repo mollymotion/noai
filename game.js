@@ -31,12 +31,6 @@ const HEART_SPAWN_CHANCE = 0.06; // was 0.03
 const HEART_BASE_W = 22;         // was 18
 const HEART_BASE_H = 20;         // was 16
 
-// Cash system
-const CASH_ENEMY_CHANCE = 0.15; // 15% of enemies drop cash
-const CASH_VALUE = 100;
-const CASH_BASE_W = 24;
-const CASH_BASE_H = 24;
-
 // Enemy spawn boundaries
 const ENEMY_SPAWN_MARGIN_TOP = 40;
 const ENEMY_SPAWN_MARGIN_BOTTOM = 40;
@@ -55,9 +49,6 @@ enemySprite.src = "enemy-sprite-brain.png";
 
 const bulletImage = new Image();
 bulletImage.src = "bullet.png";
-
-const cashImage = new Image();
-cashImage.src = "cash.png";
 
 // Input
 const keys = new Set();
@@ -130,7 +121,6 @@ const player = { x: 60, y: 200, w: 62, h: 62, speed: 260 };
 const bullets = [];
 const enemies = [];
 const pickups = [];
-const cashPickups = [];
 
 // Enemy animation state
 let enemyAnimAccum = 0;
@@ -139,7 +129,6 @@ let enemyAnimStep = 0;
 let lastTime = performance.now();
 let spawnTimer = 0;
 let score = 0;
-let cash = 0;
 let alive = true;
 
 let hp = MAX_HP;
@@ -185,13 +174,11 @@ function reset() {
   bullets.length = 0;
   enemies.length = 0;
   pickups.length = 0;
-  cashPickups.length = 0;
 
   player.x = 60;
   player.y = 200;
 
   score = 0;
-  cash = 0;
   alive = true;
   spawnTimer = 0.3;
 
@@ -399,7 +386,6 @@ function update(dt) {
       speed,
       phaseX: Math.random() * Math.PI * 2,
       phaseY: Math.random() * Math.PI * 2,
-      dropsCash: Math.random() < CASH_ENEMY_CHANCE, // Mark cash-dropping enemies
     });
 
     if (Math.random() < HEART_SPAWN_CHANCE) {
@@ -433,11 +419,6 @@ function update(dt) {
     p.phase += dt * 6;
   });
 
-  cashPickups.forEach((c) => {
-    c.x -= c.speed * dt;
-    c.phase += dt * 8; // slightly faster animation
-  });
-
   // Cleanup offscreen enemies/pickups
   for (let i = enemies.length - 1; i >= 0; i--) {
     if (enemies[i].x + enemies[i].w < 0) enemies.splice(i, 1);
@@ -445,28 +426,11 @@ function update(dt) {
   for (let i = pickups.length - 1; i >= 0; i--) {
     if (pickups[i].x + pickups[i].w < 0) pickups.splice(i, 1);
   }
-  for (let i = cashPickups.length - 1; i >= 0; i--) {
-    if (cashPickups[i].x + cashPickups[i].w < 0) cashPickups.splice(i, 1);
-  }
 
   // Bullet vs enemy
   for (let ei = enemies.length - 1; ei >= 0; ei--) {
     for (let bi = bullets.length - 1; bi >= 0; bi--) {
       if (aabb(enemies[ei], bullets[bi])) {
-        const enemy = enemies[ei];
-        
-        // Check if enemy drops cash
-        if (enemy.dropsCash) {
-          cashPickups.push({
-            x: enemy.x + enemy.w / 2 - CASH_BASE_W / 2,
-            y: enemy.y + enemy.h / 2 - CASH_BASE_H / 2,
-            w: CASH_BASE_W,
-            h: CASH_BASE_H,
-            speed: enemy.speed * 0.8,
-            phase: Math.random() * Math.PI * 2,
-          });
-        }
-        
         enemies.splice(ei, 1);
         bullets.splice(bi, 1);
         score += 10;
@@ -484,14 +448,6 @@ function update(dt) {
 
       if (hp < MAX_HP) hp++;
       pickups.splice(i, 1);
-    }
-  }
-
-  // Player vs cash
-  for (let i = cashPickups.length - 1; i >= 0; i--) {
-    if (aabb(player, cashPickups[i])) {
-      cash += CASH_VALUE;
-      cashPickups.splice(i, 1);
     }
   }
 
@@ -550,20 +506,6 @@ function draw() {
     ctx.restore();
   }
 
-  // Cash pickups
-  for (const c of cashPickups) {
-    const sx = 1 + Math.sin(c.phase) * 0.12;
-    const sy = 1 + Math.cos(c.phase) * 0.12;
-
-    if (cashImage.complete) {
-      ctx.save();
-      ctx.translate(c.x + c.w / 2, c.y + c.h / 2);
-      ctx.scale(sx, sy);
-      ctx.drawImage(cashImage, -c.w / 2, -c.h / 2, c.w, c.h);
-      ctx.restore();
-    }
-  }
-
   // Enemies (wiggle) — animated sprite
   for (const e of enemies) {
     const wiggle = 1 + Math.sin(e.phaseX) * 0.06;
@@ -597,10 +539,9 @@ function draw() {
   ctx.fillStyle = "#e5e7eb";
   ctx.font = "16px system-ui, sans-serif";
   ctx.fillText(`Score: ${score}`, 12, 24);
-  ctx.fillText(`Cash: ${cash}`, 12, 44);
 
   const hearts = "♥".repeat(hp) + "♡".repeat(MAX_HP - hp);
-  ctx.fillText(`HP: ${hearts}`, 12, 64);
+  ctx.fillText(`HP: ${hearts}`, 12, 44);
 
   if (!alive) {
     ctx.font = "28px system-ui, sans-serif";
