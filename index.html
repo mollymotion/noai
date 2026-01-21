@@ -96,6 +96,13 @@
       pointer-events: none;
     }
 
+    /* Add extra space below blurb on mobile to avoid Stripe button overlap */
+    @media (hover: none), (pointer: coarse) {
+      #game-blurb {
+        bottom: 120px;
+      }
+    }
+
     /* Subtle divider above description */
     #game-blurb::before {
       content: '';
