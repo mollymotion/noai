@@ -59,10 +59,10 @@
       #instructions { display: none; }
     }
 
-    /* ───────── Mobile instructions (mobile ONLY) ───────── */
+    /* ───────── Mobile instructions (mobile ONLY, now above canvas) ───────── */
     #mobile-instructions {
-      position: absolute;
-      bottom: 96px;
+      position: fixed;
+      top: 0;
       left: 50%;
       transform: translateX(-50%);
       max-width: 90%;
@@ -70,11 +70,12 @@
       font: 16px system-ui, sans-serif;
       text-align: center;
       line-height: 1.4;
-      background: rgba(0,0,0,0.6);
-      padding: 12px 16px;
-      border-radius: 12px;
-      z-index: 15;
+      background: rgba(0,0,0,0.7);
+      padding: 16px 16px 12px 16px;
+      border-radius: 0 0 12px 12px;
+      z-index: 100;
       pointer-events: none;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
     }
 
     /* Hide mobile instructions on desktop */
@@ -134,13 +135,13 @@
 </head>
 
 <body>
-  <div id="wrap">
-    <!-- Mobile-only instructions (moved above canvas) -->
-    <div id="mobile-instructions">
-      Drag the player to move<br>
-      Tap with your other thumb to shoot
-    </div>
+  <!-- Mobile-only instructions (now fixed at top of viewport) -->
+  <div id="mobile-instructions">
+    Drag the player to move<br>
+    Tap with your other thumb to shoot
+  </div>
 
+  <div id="wrap">
     <canvas id="game"></canvas>
 
     <!-- Desktop instructions -->
